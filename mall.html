@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Add a GeoJSON polygon</title>
+    <meta property="og:description" content="Style a polygon with the fill layer type." />
+    <meta charset='utf-8'>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css' />
+    <script src='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body,
+        #map {
+            height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <script>
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {},
+                layers: [{
+                    id: 'background',
+                    type: 'background',
+                    paint: {
+                        'background-color': '#fff'
+                    }
+                }]
+            },
+            center: { lng: 0.044760892690760556, lat: -0.07468958215049781 },
+            zoom: 12
+        });
+
+        map.on('load', () => {
+
+            fetch("Group 2@2x.svg")
+                .then(response => response.text())
+                .then(svgText => {
+
+                    const geoJSON = svgToGeoJSON(svgText);
+                    console.log('geoJSON', JSON.stringify(geoJSON));
+                    map.getSource('maine').setData(geoJSON);
+                })
+
+
+            map.addSource('maine', {
+                'type': 'geojson',
+                'data': {
+                    "type": "FeatureCollection",
+                    "features": []
+                }
+            });
+            map.addLayer({
+                'id': 'maine',
+                'type': 'fill',
+                'source': 'maine',
+                'layout': {},
+                'paint': {
+                    'fill-color': '#088',
+                    'fill-opacity': 0.5
+                }
+            });
+            map.addLayer({
+                'id': 'lines',
+                'type': 'line',
+                'source': 'maine',
+                'layout': {},
+                'paint': {
+                    'line-color': 'white',
+                    'line-width': 0.5
+                }
+            });
+
+            map.addLayer({
+                'id': 'maine-hover',
+                'type': 'fill',
+                'source': 'maine',
+                'layout': {},
+                'paint': {
+                    'fill-color': 'red',
+                    'fill-opacity': 0.5
+                }
+            });
+
+            map.on('mousemove', 'maine', (e) => {
+                //make hovered feature red
+                const id = e.features[0].properties.id;
+                console.log('id', id);
+                map.setFilter('maine-hover', ['==', 'id', id]);
+            });
+
+            map.on('mouseleave', 'maine', () => {
+                //reset the color of the hovered feature
+                map.setFilter('maine-hover', ['==', 'id', '']);
+            });
+
+            map.on('click', 'maine', (e) => {
+                console.log(e.features[0]);
+                //change the color of the clicked feature
+
+            });
+        });
+
+
+
+        function svgToGeoJSON(svgString) {
+            const parser = new DOMParser();
+            const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
+
+            const geoJSON = {
+                type: 'FeatureCollection',
+                features: []
+            };
+
+            // Scale factor and base coordinates 
+            const SCALE_FACTOR = 0.0001;
+            const BASE_LONG = 0;
+            const BASE_LAT = 0;
+
+            function pathToCoordinates(d) {
+                const commands = d.match(/[A-Za-z][^A-Za-z]*/g) || [];
+                const coordinates = [];
+                let currentX = 0;
+                let currentY = 0;
+
+                for (let cmd of commands) {
+                    const type = cmd[0];
+                    const args = cmd.slice(1).trim().split(/[\s,]+/).map(Number);
+
+                    switch (type) {
+                        case 'M':
+                        case 'L':
+                        case 'H':
+                        case 'V':
+                            if (type === 'H') {
+                                currentX = args[0] * SCALE_FACTOR + BASE_LONG;
+                            } else if (type === 'V') {
+                                currentY = -(args[0] * SCALE_FACTOR) + BASE_LAT;
+                            } else {
+                                currentX = args[0] * SCALE_FACTOR + BASE_LONG;
+                                currentY = -(args[1] * SCALE_FACTOR) + BASE_LAT;
+                            }
+                            coordinates.push([currentX, currentY]);
+                            break;
+                        case 'Z':
+                            if (coordinates.length > 0) {
+                                coordinates.push([coordinates[0][0], coordinates[0][1]]);
+                            }
+                            break;
+                    }
+                }
+                return coordinates;
+            }
+
+            const paths = svgDoc.getElementsByTagName('path');
+            for (let path of paths) {
+                const d = path.getAttribute('d');
+                const coordinates = pathToCoordinates(d);
+
+                if (coordinates.length > 2) {
+                    const feature = {
+                        type: 'Feature',
+                        geometry: {
+                            type: 'Polygon',
+                            coordinates: [coordinates]
+                        },
+                        properties: {
+                            id: Math.random().toString(36).substr(2, 9)
+                        }
+                    };
+
+                    geoJSON.features.push(feature);
+                }
+            }
+
+            return geoJSON;
+        }
+
+    </script>
+</body>
+
+</html>
